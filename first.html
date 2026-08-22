@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STG1 — least significant</title>
+<style>
+  :root{
+    --paper:#E9E5DB; --paper-2:#DCD7CA; --paper-3:#CFC9BA;
+    --substrate:#131619; --substrate-2:#1B2027; --substrate-3:#252C34;
+    --ink:#1B1917; --ink-soft:#5A5347;
+    --safelight:#DE8B2C; --trace:#58A0AE; --alert:#C4553C;
+    --rl:rgba(27,25,23,.16); --rd:rgba(233,229,219,.13);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+  .masthead{border-bottom:1px solid var(--rl);padding:18px 26px 14px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .wordmark{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.34em;text-transform:uppercase}
+  .tagline{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--ink-soft);text-transform:uppercase}
+  .masthead .spacer{flex:1}
+  .stamp{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--ink-soft);text-transform:uppercase}
+
+  .tabs{display:flex;border-bottom:1px solid var(--rl);background:var(--paper-2)}
+  .tab{appearance:none;background:none;border:0;border-right:1px solid var(--rl);padding:13px 26px;
+       font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);cursor:pointer;position:relative}
+  .tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"]{color:var(--ink);background:var(--paper)}
+  .tab[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--safelight)}
+  .tab:focus-visible{outline:2px solid var(--trace);outline-offset:-4px}
+
+  .panel{display:none}
+  .panel.on{display:block}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .cols > *{padding:24px 26px}
+  .cols > *:first-child{border-right:1px solid var(--rl)}
+  @media(max-width:880px){.cols{grid-template-columns:1fr}.cols > *:first-child{border-right:0;border-bottom:1px solid var(--rl)}}
+
+  .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px}
+
+  .drop{border:1px dashed var(--rl);background:var(--paper-2);padding:26px 18px;text-align:center;cursor:pointer;transition:background .12s,border-color .12s}
+  .drop:hover,.drop.hot{background:var(--paper-3);border-color:var(--safelight)}
+  .drop p{margin:0;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:var(--ink-soft);text-transform:uppercase}
+  .drop:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+
+  .prev{margin-top:14px;background:var(--paper-3);border:1px solid var(--rl)}
+  .prev img,.prev canvas{display:block;width:100%;height:auto;max-height:290px;object-fit:contain}
+
+  table.spec{width:100%;border-collapse:collapse;margin-top:14px;font-family:var(--mono);font-size:12px}
+  table.spec td{padding:5px 0;border-bottom:1px solid var(--rl);vertical-align:baseline}
+  table.spec td:first-child{color:var(--ink-soft);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;width:44%}
+  table.spec td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+
+  .seg{display:flex;border:1px solid var(--rl);width:fit-content;margin-bottom:12px}
+  .seg button{appearance:none;background:var(--paper-2);border:0;border-right:1px solid var(--rl);padding:7px 16px;
+              font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;color:var(--ink-soft)}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+  .seg button:focus-visible{outline:2px solid var(--trace);outline-offset:-3px}
+
+  textarea{width:100%;min-height:132px;background:var(--paper-2);border:1px solid var(--rl);padding:11px;
+           font-family:var(--mono);font-size:12.5px;line-height:1.6;color:var(--ink);resize:vertical}
+  textarea:focus{outline:2px solid var(--trace);outline-offset:-1px}
+
+  .slider{display:flex;align-items:center;gap:14px;margin:18px 0 6px}
+  .slider input[type=range]{flex:1;accent-color:var(--safelight)}
+  .slider .val{font-family:var(--mono);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;min-width:1.2em;text-align:right}
+
+  .meter{margin-top:14px}
+  .meter .track{height:9px;background:var(--paper-3);border:1px solid var(--rl);position:relative;overflow:hidden}
+  .meter .fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--trace);transition:width .18s}
+  .meter .fill.over{background:var(--alert)}
+  .meter .read{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;margin-top:6px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+  .meter .read b{color:var(--ink);font-weight:700}
+
+  .go{appearance:none;width:100%;margin-top:18px;padding:14px;background:var(--ink);color:var(--paper);border:0;cursor:pointer;
+      font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase}
+  .go:hover:not(:disabled){background:var(--safelight);color:var(--ink)}
+  .go:disabled{opacity:.32;cursor:not-allowed}
+  .go:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+
+  .note{font-family:var(--mono);font-size:11.5px;line-height:1.65;margin-top:12px;padding:10px 12px;border-left:2px solid var(--safelight);background:var(--paper-2);color:var(--ink-soft)}
+  .note.bad{border-left-color:var(--alert);color:var(--alert)}
+  .note.good{border-left-color:var(--trace)}
+
+  /* substrate half */
+  .sub{background:var(--substrate);color:var(--paper);padding:24px 26px}
+  .sub .lbl{color:rgba(233,229,219,.5)}
+  .sub .drop{background:var(--substrate-2);border-color:var(--rd)}
+  .sub .drop:hover,.sub .drop.hot{background:var(--substrate-3);border-color:var(--safelight)}
+  .sub .drop p{color:rgba(233,229,219,.5)}
+  .sub .seg{border-color:var(--rd)}
+  .sub .seg button{background:var(--substrate-2);border-right-color:var(--rd);color:rgba(233,229,219,.55)}
+  .sub .seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink)}
+  .sub table.spec td{border-bottom-color:var(--rd);color:var(--paper)}
+  .sub table.spec td:first-child{color:rgba(233,229,219,.45)}
+  .sub .note{background:var(--substrate-2);color:rgba(233,229,219,.62)}
+
+  .strip{display:grid;grid-template-columns:repeat(8,1fr);gap:9px;margin-top:16px}
+  .plate{background:var(--substrate-2);border:1px solid var(--rd);cursor:pointer;padding:0;position:relative;transition:border-color .12s}
+  .plate:hover{border-color:rgba(233,229,219,.4)}
+  .plate[aria-pressed="true"]{border-color:var(--safelight);box-shadow:0 0 0 1px var(--safelight)}
+  .plate canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  .plate .cap{display:flex;justify-content:space-between;padding:5px 6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;color:rgba(233,229,219,.45)}
+  .plate[aria-pressed="true"] .cap{color:var(--safelight)}
+  .plate:focus-visible{outline:2px solid var(--trace);outline-offset:2px}
+  @media(max-width:880px){.strip{grid-template-columns:repeat(4,1fr)}}
+
+  .big{margin-top:18px;background:#000;border:1px solid var(--rd);position:relative}
+  .big canvas{display:block;width:100%;height:auto;image-rendering:pixelated}
+  .big .tagbar{position:absolute;left:0;bottom:0;background:rgba(19,22,25,.9);padding:5px 10px;
+               font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--safelight)}
+
+  .result{padding:24px 26px}
+  .payout{background:var(--paper-2);border:1px solid var(--rl);padding:14px;margin-top:14px;
+          font-family:var(--mono);font-size:12.5px;line-height:1.7;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto}
+  .payout video,.payout img,.payout audio{display:block;max-width:100%;height:auto;margin:0 auto}
+  a.dl{display:inline-block;margin-top:12px;padding:11px 20px;background:var(--ink);color:var(--paper);text-decoration:none;
+       font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+  a.dl:hover{background:var(--safelight);color:var(--ink)}
+
+  .busy{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--safelight)}
+
+  /* container */
+  .chunks{margin-top:14px;font-family:var(--mono);font-size:12px}
+  .ck{display:flex;align-items:baseline;gap:12px;padding:7px 10px;border:1px solid var(--rd);border-bottom:0;background:var(--substrate-2)}
+  .ck:last-child{border-bottom:1px solid var(--rd)}
+  .ck.crit{border-left:2px solid rgba(233,229,219,.5)}
+  .ck.odd{border-left:2px solid var(--safelight);background:rgba(222,139,44,.08)}
+  .ck.tail{border-left:2px solid var(--alert);background:rgba(196,85,60,.1)}
+  .ck .t{font-weight:700;letter-spacing:.08em;min-width:62px}
+  .ck .sz{color:rgba(233,229,219,.45);font-variant-numeric:tabular-nums;min-width:92px;text-align:right}
+  .ck .d{color:rgba(233,229,219,.55);font-size:11px}
+  .ck.odd .t,.ck.tail .t{color:var(--safelight)}
+  .ck.tail .t{color:var(--alert)}
+  .dump{font-family:var(--mono);font-size:12px;background:var(--substrate-2);border:1px solid var(--rd);
+        padding:12px;margin-top:10px;white-space:pre-wrap;word-break:break-word;max-height:260px;overflow:auto;color:var(--paper)}
+  h2.sec{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;margin:0 0 4px}
+  p.sub-note{font-size:13.5px;color:var(--ink-soft);margin:0 0 16px;max-width:62ch}
+  .sub p.sub-note{color:rgba(233,229,219,.55)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="masthead">
+  <span class="wordmark">STG1</span>
+  <span class="tagline">least significant</span>
+  <span class="spacer"></span>
+  <span class="stamp">offline · nothing leaves this machine</span>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-p="hide">Hide</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="reveal">Reveal</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="inspect">Inspect</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="container">Container</button>
+</div>
+
+<!-- ============ HIDE ============ -->
+<section class="panel on" id="p-hide">
+  <div class="cols">
+    <div>
+      <h2 class="sec">Carrier</h2>
+      <p class="sub-note">The image that will hold the payload. PNG or JPEG in — always PNG out, because JPEG destroys what we write.</p>
+      <div class="drop" id="carDrop" tabindex="0" role="button"><p>Drop image · or click</p></div>
+      <input type="file" id="carFile" accept="image/*" hidden>
+      <div class="prev" id="carPrev" hidden><img id="carImg" alt="Carrier preview"></div>
+      <table class="spec" id="carSpec" hidden>
+        <tr><td>Dimensions</td><td id="s-dim">—</td></tr>
+        <tr><td>Pixels</td><td id="s-px">—</td></tr>
+        <tr><td>Channels</td><td id="s-ch">—</td></tr>
+        <tr><td>Capacity</td><td id="s-cap">—</td></tr>
+      </table>
+    </div>
+
+    <div>
+      <h2 class="sec">Payload</h2>
+      <p class="sub-note">Text or any file. Files keep their name and type, so a video comes back out playable.</p>
+      <div class="seg" role="group">
+        <button id="mText" aria-pressed="true">Text</button>
+        <button id="mFile" aria-pressed="false">File</button>
+      </div>
+      <div id="wText">
+        <textarea id="msg" placeholder="Type or paste the message…"></textarea>
+      </div>
+      <div id="wFile" hidden>
+        <div class="drop" id="payDrop" tabindex="0" role="button"><p>Drop payload file · or click</p></div>
+        <input type="file" id="payFile" hidden>
+        <table class="spec" id="paySpec" hidden>
+          <tr><td>Name</td><td id="s-pn">—</td></tr>
+          <tr><td>Type</td><td id="s-pt">—</td></tr>
+          <tr><td>Size</td><td id="s-ps">—</td></tr>
+        </table>
+      </div>
+
+      <div class="slider">
+        <span class="lbl" style="margin:0">Bits per channel</span>
+        <input type="range" id="bpc" min="1" max="4" value="1" step="1">
+        <span class="val" id="bpcV">1</span>
+      </div>
+
+      <div class="meter">
+        <div class="track"><div class="fill" id="fill"></div></div>
+        <div class="read"><span id="mLeft">—</span><span id="mRight">—</span></div>
+      </div>
+
+      <button class="go" id="doHide" disabled>Hide it</button>
+      <div id="hideMsg"></div>
+      <div id="hideOut"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REVEAL ============ -->
+<section class="panel" id="p-reveal">
+  <div class="result">
+    <h2 class="sec">Reveal</h2>
+    <p class="sub-note">Drop a carrier. Bit depth is detected automatically by looking for the STG1 marker at each of the four depths.</p>
+    <div class="drop" id="revDrop" tabindex="0" role="button"><p>Drop image · or click</p></div>
+    <input type="file" id="revFile" accept="image/*" hidden>
+    <div id="revOut"></div>
+  </div>
+</section>
+
+<!-- ============ INSPECT ============ -->
+<section class="panel" id="p-inspect">
+  <div class="sub">
+    <h2 class="sec">Bit planes</h2>
+    <p class="sub-note">Every image is eight stacked one-bit images. Plane 7 is the photograph. Plane 0 is the noise floor — and the place a payload lives.</p>
+    <div class="drop" id="insDrop" tabindex="0" role="button"><p>Drop image · or click</p></div>
+    <input type="file" id="insFile" accept="image/*" hidden>
+
+    <div id="insBody" hidden>
+      <div class="seg" role="group" style="margin-top:18px">
+        <button data-c="0" aria-pressed="false">R</button>
+        <button data-c="1" aria-pressed="false">G</button>
+        <button data-c="2" aria-pressed="false">B</button>
+        <button data-c="3" aria-pressed="true">RGB</button>
+      </div>
+      <div class="strip" id="strip"></div>
+      <div class="big"><canvas id="bigC"></canvas><div class="tagbar" id="bigTag">plane 0</div></div>
+      <div class="note" id="insNote"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONTAINER ============ -->
+<section class="panel" id="p-container">
+  <div class="sub">
+    <h2 class="sec">Container</h2>
+    <p class="sub-note">Before touching a single pixel: a PNG is a header followed by labelled chunks, and it ends at IEND.
+      Anything a decoder doesn't recognise, it skips. Anything after IEND, it never reads at all.</p>
+    <div class="drop" id="conDrop" tabindex="0" role="button"><p>Drop a PNG · or click</p></div>
+    <input type="file" id="conFile" accept="image/*,.png" hidden>
+    <div id="conOut"></div>
+  </div>
+</section>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const MAGIC = [83,84,71,49]; // "STG1"
+const fmt = n => n.toLocaleString("en-US");
+const kb = n => n < 1024 ? n + " B"
+  : n < 1048576 ? (n/1024).toFixed(1) + " KB"
+  : (n/1048576).toFixed(2) + " MB";
+const esc = s => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---------- tabs ---------- */
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "p-" + t.dataset.p));
+});
+
+/* ---------- drop zone wiring ---------- */
+function wire(zone, input, cb) {
+  const open = () => input.click();
+  zone.onclick = open;
+  zone.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } };
+  zone.ondragover = e => { e.preventDefault(); zone.classList.add("hot"); };
+  zone.ondragleave = () => zone.classList.remove("hot");
+  zone.ondrop = e => { e.preventDefault(); zone.classList.remove("hot"); if (e.dataTransfer.files[0]) cb(e.dataTransfer.files[0]); };
+  input.onchange = () => { if (input.files[0]) cb(input.files[0]); };
+}
+
+/* ---------- image -> ImageData ---------- */
+function loadPixels(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = im.naturalWidth; c.height = im.naturalHeight;
+      const x = c.getContext("2d", { willReadFrequently: true });
+      x.drawImage(im, 0, 0);
+      const d = x.getImageData(0, 0, c.width, c.height);
+      res({ data: d.data, url, w: c.width, h: c.height });
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Not a readable image")); };
+    im.src = url;
+  });
+}
+
+/* ---------- capacity ---------- */
+const capacityBytes = (w, h, bpc) => Math.floor(w * h * 3 * bpc / 8);
+
+/* ---------- header ----------
+   STG1 | bpc:u8 | payloadLen:u32be | metaLen:u16be | metaJSON | payload   */
+function buildBlob(bytes, meta, bpc) {
+  const m = new TextEncoder().encode(JSON.stringify(meta));
+  const out = new Uint8Array(11 + m.length + bytes.length);
+  out.set(MAGIC, 0);
+  out[4] = bpc;
+  new DataView(out.buffer).setUint32(5, bytes.length, false);
+  new DataView(out.buffer).setUint16(9, m.length, false);
+  out.set(m, 11);
+  out.set(bytes, 11 + m.length);
+  return out;
+}
+
+/* ---------- embed ---------- */
+function embed(d, blob, bpc) {
+  const mask = 0xFF ^ ((1 << bpc) - 1), total = blob.length * 8;
+  let bit = 0, i = 0;
+  while (bit < total && i < d.length) {
+    if ((i & 3) === 3) { d[i] = 255; i++; continue; }
+    let v = 0;
+    for (let k = 0; k < bpc; k++) {
+      const b = bit + k;
+      v = (v << 1) | (b < total ? (blob[b >> 3] >> (7 - (b & 7))) & 1 : 0);
+    }
+    d[i] = (d[i] & mask) | v;
+    bit += bpc; i++;
+  }
+  for (; i < d.length; i++) if ((i & 3) === 3) d[i] = 255;
+  return bit >= total;
+}
+
+/* ---------- extract ---------- */
+function reader(d, bpc) {
+  let i = 0, buf = 0, n = 0;
+  const low = (1 << bpc) - 1;
+  return function () {
+    while (n < 8) {
+      while ((i & 3) === 3) i++;
+      if (i >= d.length) throw new Error("ran past the end of the image");
+      buf = (buf << bpc) | (d[i] & low); n += bpc; i++;
+    }
+    const s = n - 8, b = (buf >> s) & 0xFF;
+    buf &= (1 << s) - 1; n = s;
+    return b;
+  };
+}
+function extract(px) {
+  for (let bpc = 1; bpc <= 4; bpc++) {
+    try {
+      const rd = reader(px.data, bpc);
+      if (!MAGIC.every(m => rd() === m)) continue;
+      if (rd() !== bpc) continue;
+      let L = 0; for (let k = 0; k < 4; k++) L = L * 256 + rd();
+      let M = 0; for (let k = 0; k < 2; k++) M = M * 256 + rd();
+      if (L > capacityBytes(px.w, px.h, bpc) || M > 4096) continue;
+      const mb = new Uint8Array(M); for (let k = 0; k < M; k++) mb[k] = rd();
+      const meta = JSON.parse(new TextDecoder().decode(mb));
+      const body = new Uint8Array(L); for (let k = 0; k < L; k++) body[k] = rd();
+      return { bpc, meta, body };
+    } catch (e) { /* try next depth */ }
+  }
+  return null;
+}
+
+/* ================= HIDE ================= */
+let carrier = null, payload = null, mode = "text";
+
+wire($("#carDrop"), $("#carFile"), async f => {
+  $("#hideMsg").innerHTML = ""; $("#hideOut").innerHTML = "";
+  if (carrier && carrier.url) URL.revokeObjectURL(carrier.url);
+  try { carrier = await loadPixels(f); } catch (e) {
+    carrier = null; $("#hideMsg").innerHTML = `<div class="note bad">${e.message}</div>`; return refresh();
+  }
+  carrier.name = f.name.replace(/\.[^.]+$/, "");
+  $("#carImg").src = carrier.url;
+  $("#carPrev").hidden = false; $("#carSpec").hidden = false;
+  $("#s-dim").textContent = `${carrier.w} × ${carrier.h}`;
+  $("#s-px").textContent = fmt(carrier.w * carrier.h);
+  $("#s-ch").textContent = fmt(carrier.w * carrier.h * 3);
+  refresh();
+});
+
+wire($("#payDrop"), $("#payFile"), async f => {
+  const buf = await f.arrayBuffer();
+  payload = { bytes: new Uint8Array(buf), name: f.name, mime: f.type || "application/octet-stream" };
+  $("#paySpec").hidden = false;
+  $("#s-pn").textContent = f.name;
+  $("#s-pt").textContent = payload.mime;
+  $("#s-ps").textContent = kb(payload.bytes.length);
+  refresh();
+});
+
+$("#mText").onclick = () => setMode("text");
+$("#mFile").onclick = () => setMode("file");
+function setMode(m) {
+  mode = m;
+  $("#mText").setAttribute("aria-pressed", m === "text");
+  $("#mFile").setAttribute("aria-pressed", m === "file");
+  $("#wText").hidden = m !== "text";
+  $("#wFile").hidden = m !== "file";
+  refresh();
+}
+$("#msg").oninput = refresh;
+$("#bpc").oninput = () => { $("#bpcV").textContent = $("#bpc").value; refresh(); };
+
+function currentPayload() {
+  if (mode === "text") {
+    const t = $("#msg").value;
+    if (!t) return null;
+    return { bytes: new TextEncoder().encode(t), name: "message.txt", mime: "text/plain" };
+  }
+  return payload;
+}
+
+function refresh() {
+  const bpc = +$("#bpc").value, p = currentPayload();
+  const cap = carrier ? capacityBytes(carrier.w, carrier.h, bpc) : 0;
+  if (carrier) $("#s-cap").textContent = `${kb(cap)} @ ${bpc} bpc`;
+  const need = p ? buildBlob(p.bytes, {}, bpc).length + 40 : 0;
+  const pct = cap ? need / cap : 0;
+  const f = $("#fill");
+  f.style.width = Math.min(100, pct * 100) + "%";
+  f.classList.toggle("over", pct > 1);
+  $("#mLeft").innerHTML = p && carrier ? `<b>${fmt(need)}</b> of ${fmt(cap)} B` : "—";
+  $("#mRight").textContent = p && carrier ? (pct * 100).toFixed(1) + "%" : "—";
+  $("#doHide").disabled = !(carrier && p && pct <= 1);
+  if (carrier && p && pct > 1) {
+    const mp = Math.ceil(need * 8 / 3 / bpc / 1e6 * 100) / 100;
+    $("#hideMsg").innerHTML = `<div class="note bad">Too big by ${kb(need - cap)}. This needs a carrier of at least ${mp} MP at ${bpc} bpc, or a higher bit depth.</div>`;
+  } else if (carrier && p) $("#hideMsg").innerHTML = "";
+}
+
+$("#doHide").onclick = () => {
+  const bpc = +$("#bpc").value, p = currentPayload();
+  $("#doHide").disabled = true;
+  $("#hideOut").innerHTML = `<div class="note"><span class="busy">Writing bits, then encoding PNG — a big carrier takes a few seconds…</span></div>`;
+  setTimeout(() => {
+    const c = document.createElement("canvas");
+    c.width = carrier.w; c.height = carrier.h;
+    const x = c.getContext("2d");
+    const px = new ImageData(new Uint8ClampedArray(carrier.data), carrier.w, carrier.h);
+    const ok = embed(px.data, buildBlob(p.bytes, { name: p.name, mime: p.mime }, bpc), bpc);
+    if (!ok) { refresh(); $("#hideOut").innerHTML = `<div class="note bad">Payload did not fit.</div>`; return; }
+    x.putImageData(px, 0, 0);
+    c.toBlob(b => {
+      const name = carrier.name + "-stego.png";
+      refresh();
+      $("#hideOut").innerHTML =
+        `<div class="note good">Written at ${bpc} bit${bpc>1?"s":""} per channel. Output PNG is ${kb(b.size)} — bigger than the carrier was,
+         because the noise you just added is incompressible. That size jump is itself a tell.</div>`;
+      const a = document.createElement("a");
+      a.className = "dl"; a.textContent = "Download PNG"; a.download = name;
+      a.href = URL.createObjectURL(b);
+      a.onclick = () => setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      $("#hideOut").appendChild(a);
+    }, "image/png");
+  }, 30);
+};
+
+/* ================= CONTAINER ================= */
+const KNOWN = {
+  IHDR:"header — dimensions, bit depth", IDAT:"the actual compressed pixels", IEND:"end of image. nothing after this is read",
+  PLTE:"palette", tRNS:"transparency", gAMA:"gamma", cHRM:"chromaticity", sRGB:"colour space",
+  iCCP:"embedded colour profile", tEXt:"text", zTXt:"compressed text", iTXt:"international text",
+  bKGD:"background", pHYs:"pixel dimensions", sBIT:"significant bits", tIME:"last modified",
+  eXIf:"EXIF metadata", cICP:"coding-independent code points", iDOT:"Apple parallel-decode index",
+};
+const CRIT = ["IHDR","PLTE","IDAT","IEND"];
+
+wire($("#conDrop"), $("#conFile"), async f => {
+  const o = $("#conOut");
+  const buf = new Uint8Array(await f.arrayBuffer());
+  const sig = [137,80,78,71,13,10,26,10];
+  if (!sig.every((b,i) => buf[i] === b)){
+    o.innerHTML = `<div class="note bad">Not a PNG — this view only knows PNG chunk structure. JPEG has a different
+      container (segments, not chunks) and it can hide things too, just differently.</div>`;
+    return;
+  }
+  const dv = new DataView(buf.buffer);
+  let i = 8, rows = [], iendEnd = null, counts = {}, oddballs = [];
+  while (i + 8 <= buf.length){
+    const len = dv.getUint32(i);
+    const typ = String.fromCharCode(...buf.slice(i+4, i+8));
+    counts[typ] = (counts[typ] || 0) + 1;
+    const isKnown = typ in KNOWN;
+    if (!isKnown) oddballs.push({ typ, at: i, len, body: buf.slice(i+8, i+8+len) });
+    rows.push({ typ, len, isKnown, first: counts[typ] === 1 });
+    i += 12 + len;
+    if (typ === "IEND"){ iendEnd = i; break; }
+  }
+  const trailing = iendEnd === null ? 0 : buf.length - iendEnd;
+
+  /* collapse the IDAT run — nobody needs to see 180 of them */
+  let html = `<table class="spec">
+      <tr><td>File</td><td>${esc(f.name)} · ${fmt(buf.length)} B</td></tr>
+      <tr><td>Chunks</td><td>${fmt(rows.length)} (${fmt(counts.IDAT || 0)} of them IDAT)</td></tr>
+      <tr><td>Image ends at byte</td><td>${iendEnd === null ? "no IEND found" : fmt(iendEnd)}</td></tr>
+      <tr><td>Bytes after IEND</td><td>${trailing ? `<b style="color:var(--alert)">${fmt(trailing)}</b>` : "0"}</td></tr>
+    </table><div class="chunks">`;
+  let idatShown = false;
+  for (const r of rows){
+    if (r.typ === "IDAT"){
+      if (idatShown) continue;
+      idatShown = true;
+      html += `<div class="ck crit"><span class="t">IDAT</span>
+        <span class="sz">× ${fmt(counts.IDAT)}</span><span class="d">${KNOWN.IDAT}</span></div>`;
+      continue;
+    }
+    const cls = !r.isKnown ? "odd" : CRIT.includes(r.typ) ? "crit" : "";
+    const desc = r.isKnown ? KNOWN[r.typ] : "unregistered — a decoder skips this without reading it";
+    html += `<div class="ck ${cls}"><span class="t">${esc(r.typ)}</span>
+      <span class="sz">${fmt(r.len)} B</span><span class="d">${esc(desc)}</span></div>`;
+  }
+  if (trailing){
+    const tail = buf.slice(iendEnd);
+    const zip = tail[0] === 0x50 && tail[1] === 0x4B;
+    html += `<div class="ck tail"><span class="t">after IEND</span><span class="sz">${fmt(trailing)} B</span>
+      <span class="d">${zip ? "starts PK\\x03\\x04 — that's a ZIP archive riding along" : "unidentified trailing data"}</span></div>`;
+  }
+  html += `</div>`;
+
+  for (const c of oddballs){
+    const txt = new TextDecoder("utf-8", { fatal: false }).decode(c.body);
+    const printable = !/[\u0000-\u0008\u000E-\u001F\uFFFD]/.test(txt);
+    html += `<span class="lbl" style="margin-top:18px;display:block">Inside ${esc(c.typ)}</span>
+      <div class="dump">${printable ? esc(txt.slice(0,2000))
+        : [...c.body.slice(0,96)].map(b => b.toString(16).padStart(2,"0")).join(" ") + (c.len > 96 ? " …" : "")}</div>`;
+  }
+  if (trailing){
+    const tail = buf.slice(iendEnd);
+    const url = URL.createObjectURL(new Blob([tail], { type:"application/octet-stream" }));
+    html += `<span class="lbl" style="margin-top:18px;display:block">The passenger</span>
+      <div class="note">Rename the download to .zip and open it. The same bytes are a valid image and a valid archive —
+      PNG readers stop at IEND, ZIP readers scan backwards from the end of the file. Neither ever sees the other's half.</div>
+      <a class="dl" href="${url}" download="${f.name.replace(/\.png$/i,"")}-passenger.bin">Extract the trailing bytes</a>`;
+  }
+  if (!trailing && !oddballs.length){
+    html += `<div class="note">Nothing unusual in this container — every chunk is a registered type and the file stops at IEND.
+      Which doesn't mean it's clean. Try the Inspect tab.</div>`;
+  }
+  o.innerHTML = html;
+});
+
+/* ================= REVEAL ================= */
+wire($("#revDrop"), $("#revFile"), async f => {
+  const o = $("#revOut");
+  o.innerHTML = `<div class="note"><span class="busy">Scanning bit depths…</span></div>`;
+  let px; try { px = await loadPixels(f); } catch (e) { o.innerHTML = `<div class="note bad">${e.message}</div>`; return; }
+  setTimeout(() => {
+    const r = extract(px);
+    if (!r) {
+      o.innerHTML = `<div class="note bad">No STG1 marker at any bit depth. Either this image is clean, or it was re-encoded somewhere along the way and the low bits are gone.</div>`;
+      return;
+    }
+    render(r, o);
+  }, 30);
+});
+
+async function render(r, o) {
+    let { bpc, meta, body } = r;
+    let unzipped = false;
+    if ((meta.mime || "") === "application/gzip" && "DecompressionStream" in window) {
+      try {
+        const s = new Blob([body]).stream().pipeThrough(new DecompressionStream("gzip"));
+        body = new Uint8Array(await new Response(s).arrayBuffer());
+        meta = { name: (meta.name || "").replace(/\.gz$/, ""), mime: "text/plain" };
+        unzipped = true;
+      } catch (e) { /* leave it compressed */ }
+    }
+    let inner;
+    if ((meta.mime || "").startsWith("text/")) {
+      inner = `<div class="payout">${new TextDecoder().decode(body).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]))}</div>`;
+    } else {
+      const url = URL.createObjectURL(new Blob([body], { type: meta.mime }));
+      const m = meta.mime || "";
+      const tag = m.startsWith("video/") ? `<video src="${url}" controls autoplay></video>`
+        : m.startsWith("image/") ? `<img src="${url}" alt="Recovered image">`
+        : m.startsWith("audio/") ? `<audio src="${url}" controls></audio>`
+        : `<span>${meta.name} — no inline preview for this type.</span>`;
+      inner = `<div class="payout">${tag}</div><a class="dl" href="${url}" download="${meta.name}">Save ${meta.name}</a>`;
+    }
+    o.innerHTML = `<table class="spec">
+        <tr><td>Bit depth found</td><td>${bpc} per channel</td></tr>
+        <tr><td>Name</td><td>${meta.name || "—"}</td></tr>
+        <tr><td>Type</td><td>${meta.mime || "—"}${unzipped ? " (unzipped on the way out)" : ""}</td></tr>
+        <tr><td>Recovered</td><td>${fmt(body.length)} B · ${kb(body.length)}</td></tr>
+      </table>${inner}`;
+}
+
+/* ================= INSPECT ================= */
+let ins = null, chan = 3, plane = 0;
+const TW = 132, BW = 900;
+
+/* nearest-neighbour sample so noise stays noise instead of averaging to grey */
+function planeCanvas(px, p, ch, targetW) {
+  const { w, h } = px, d = px.data;
+  const step = Math.max(1, Math.floor(w / targetW));
+  const ow = Math.floor(w / step), oh = Math.floor(h / step);
+  const c = document.createElement("canvas"); c.width = ow; c.height = oh;
+  const out = c.getContext("2d").createImageData(ow, oh);
+  const o = out.data;
+  for (let y = 0; y < oh; y++) for (let xx = 0; xx < ow; xx++) {
+    const si = ((y * step) * w + xx * step) * 4, di = (y * ow + xx) * 4;
+    if (ch === 3) {
+      o[di] = ((d[si] >> p) & 1) * 255;
+      o[di+1] = ((d[si+1] >> p) & 1) * 255;
+      o[di+2] = ((d[si+2] >> p) & 1) * 255;
+    } else {
+      const v = ((d[si + ch] >> p) & 1) * 255;
+      o[di] = o[di+1] = o[di+2] = v;
+    }
+    o[di+3] = 255;
+  }
+  c.getContext("2d").putImageData(out, 0, 0);
+  return c;
+}
+
+/* fraction of horizontally adjacent pixels whose plane bit differs.
+   natural sensor noise sits near 50%; flat or structured regions do not. */
+function flipRate(px, p, ch) {
+  const { w, h } = px, d = px.data, c = ch === 3 ? 1 : ch;
+  const stepY = Math.max(1, Math.floor(h / 260));
+  let diff = 0, tot = 0;
+  for (let y = 0; y < h; y += stepY) {
+    const row = y * w * 4;
+    for (let x = 0; x < w - 1; x++) {
+      const a = (d[row + x*4 + c] >> p) & 1, b = (d[row + (x+1)*4 + c] >> p) & 1;
+      if (a !== b) diff++;
+      tot++;
+    }
+  }
+  return tot ? diff / tot : 0;
+}
+
+wire($("#insDrop"), $("#insFile"), async f => {
+  try { ins = await loadPixels(f); } catch (e) { return; }
+  $("#insBody").hidden = false;
+  drawStrip();
+});
+document.querySelectorAll("#p-inspect .seg button").forEach(b => b.onclick = () => {
+  chan = +b.dataset.c;
+  document.querySelectorAll("#p-inspect .seg button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  drawStrip();
+});
+
+function drawStrip() {
+  const s = $("#strip"); s.innerHTML = "";
+  for (let p = 7; p >= 0; p--) {
+    const btn = document.createElement("button");
+    btn.className = "plate";
+    btn.setAttribute("aria-pressed", p === plane);
+    btn.appendChild(planeCanvas(ins, p, chan, TW));
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = `<span>plane ${p}</span><span>${(flipRate(ins, p, chan) * 100).toFixed(0)}%</span>`;
+    btn.appendChild(cap);
+    btn.onclick = () => { plane = p; drawStrip(); };
+    s.appendChild(btn);
+  }
+  const big = $("#bigC"), src = planeCanvas(ins, plane, chan, BW);
+  big.width = src.width; big.height = src.height;
+  big.getContext("2d").drawImage(src, 0, 0);
+  const names = ["red", "green", "blue", "all three"];
+  $("#bigTag").textContent = `plane ${plane} · ${names[chan]}`;
+  const fr = flipRate(ins, plane, chan) * 100;
+  $("#insNote").innerHTML = plane === 0
+    ? `Flip rate ${fr.toFixed(1)}%. Untouched sensor noise lands near 50%. Well below that means flat, smooth regions.
+       A payload of raw text pulls it off 50% in a way you can often see as banding. Compressed or encrypted payloads sit right on 50% — which is exactly the point.`
+    : `Flip rate ${fr.toFixed(1)}%. The number climbs as you go down toward plane 0, because the lower the bit, the less it has to do with the picture.`;
+}
+</script>
