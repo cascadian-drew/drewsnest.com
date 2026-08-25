@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STG2 — variation selectors</title>
+<style>
+  :root{
+    --ink:#0F1420; --ink-2:#161E2C; --ink-3:#1F2939; --ink-4:#2B3749;
+    --paper:#E9ECEF; --paper-2:#D6DBE1;
+    --seen:#5BD1C4;      /* codepoints you can see */
+    --unseen:#F2637E;    /* codepoints you cannot */
+    --dim:rgba(233,236,239,.48); --dimmer:rgba(233,236,239,.28);
+    --rule:rgba(233,236,239,.14);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --emoji:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--ink);color:var(--paper);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+  .masthead{border-bottom:1px solid var(--rule);padding:13px 26px 11px;display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+  .wordmark{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.34em;text-transform:uppercase}
+  .tagline{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase}
+  .masthead .gap{flex:1}
+  .stamp{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--dimmer);text-transform:uppercase}
+
+  .tabs{display:flex;border-bottom:1px solid var(--rule);background:var(--ink-2)}
+  .tab{appearance:none;background:none;border:0;border-right:1px solid var(--rule);padding:11px 24px;
+       font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);cursor:pointer;position:relative}
+  .tab:hover{color:var(--paper)}
+  .tab[aria-selected="true"]{color:var(--paper);background:var(--ink)}
+  .tab[aria-selected="true"]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--unseen)}
+  .tab:focus-visible{outline:2px solid var(--seen);outline-offset:-4px}
+
+  .panel{display:none;padding:18px 26px 40px}
+  .panel.on{display:block}
+
+  h2.sec{font-family:var(--mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase;font-weight:700;margin:0 0 4px}
+  p.lede{font-size:13.5px;color:var(--dim);margin:0 0 13px;max-width:78ch}
+  .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin:18px 0 8px;display:block}
+  .lbl:first-child{margin-top:0}
+
+  /* base character picker */
+  .compose{display:grid;grid-template-columns:auto minmax(300px,1fr);gap:24px;align-items:stretch}
+  .col-pick{min-width:0;display:flex;flex-direction:column}
+  .col-msg{min-width:0;display:flex;flex-direction:column}
+  .col-msg #msg{flex:1;min-height:120px}
+  .col-msg #wPayFile{flex:1;display:flex;flex-direction:column}
+  .col-msg #pfDrop{flex:1;display:flex;align-items:center;justify-content:center;min-height:110px}
+  /* regulars sit beside the draw, not above it — costs a column, saves a row */
+  .picker{background:var(--ink-2);border:1px solid var(--rule);border-radius:3px;padding:12px 12px 2px;width:fit-content}
+  .picker #racks{display:flex;gap:13px;align-items:flex-start}
+  .subfield{margin-top:10px}
+  .subfield .rname{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);margin-bottom:6px}
+  .rack{margin-bottom:6px}
+  .rack .rname{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);margin-bottom:6px;white-space:nowrap}
+  /* fixed 8-up grid so the cluster stays a block instead of stringing out */
+  .keys{display:grid;grid-template-columns:repeat(8,38px);gap:6px;margin-bottom:12px;justify-content:start}
+  .keys.pinned{grid-template-columns:59px}
+  .key{appearance:none;background:var(--ink-3);border:1px solid var(--rule);border-radius:3px;cursor:pointer;
+       width:38px;height:38px;font-family:var(--emoji);font-size:19px;line-height:1;padding:0;color:var(--paper);transition:border-color .1s,background .1s}
+  .key:hover{background:var(--ink-4);border-color:var(--dim)}
+  .key[aria-pressed="true"]{border-color:var(--seen);background:var(--ink-4);box-shadow:0 0 0 1px var(--seen)}
+  .key.plain{font-family:var(--mono);font-size:17px}
+  .key.risky{border-color:rgba(242,99,126,.4)}
+  .key.pin{width:59px;height:59px;font-size:31px}
+  .rack .rname .reroll{appearance:none;background:none;border:0;padding:0 0 0 10px;cursor:pointer;
+       font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--dimmer);text-decoration:underline}
+  .rack .rname .reroll:hover{color:var(--seen)}
+  @media(max-width:900px){
+    .compose{grid-template-columns:1fr;gap:6px}
+    .picker{width:100%}
+    .keys{grid-template-columns:repeat(auto-fill,38px)}
+    .keys.pinned{grid-template-columns:repeat(2,59px)}
+  }
+  .stamp.lab{appearance:none;background:none;border:0;cursor:pointer;font-family:var(--mono);
+       font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);
+       border-bottom:1px dotted var(--rule);padding:0 0 2px}
+  .stamp.lab:hover{color:var(--dim)}
+  .stamp.lab[aria-pressed="true"]{color:var(--unseen);border-bottom-color:var(--unseen)}
+  .key:focus-visible{outline:2px solid var(--seen);outline-offset:2px}
+
+  textarea,input.txt{width:100%;background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:11px;
+    font-family:var(--mono);font-size:13px;line-height:1.6;color:#12161E;resize:vertical}
+  textarea{min-height:104px}
+  textarea:focus,input.txt:focus{outline:2px solid var(--seen);outline-offset:-1px}
+  input.txt{font-family:var(--emoji);font-size:20px;height:46px;width:120px}
+
+  .out{margin-top:14px;background:var(--ink-2);border:1px solid var(--rule);border-radius:3px;padding:16px;text-align:center}
+  .glyph{font-family:var(--emoji);font-size:58px;line-height:1.1;user-select:all;word-break:break-all}
+  .drop{border:1px dashed var(--rule);background:var(--ink-2);border-radius:3px;padding:24px 18px;text-align:center;cursor:pointer;
+    transition:background .12s,border-color .12s}
+  .drop:hover,.drop.hot{background:var(--ink-3);border-color:var(--seen)}
+  .drop p{margin:0;font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+  .drop:focus-visible{outline:2px solid var(--seen);outline-offset:2px}
+  a.dl{display:inline-block;margin:14px 5px 0;padding:11px 22px;background:var(--paper);color:#12161E;text-decoration:none;border-radius:3px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase}
+  a.dl:hover{background:var(--seen)}
+  .shot{display:block;max-width:100%;max-height:72vh;width:auto;height:auto;margin:0 auto;border-radius:3px;image-rendering:auto}
+
+  /* illuminate: narrow input left, decoded output right */
+  .reveal{display:grid;grid-template-columns:minmax(280px,390px) minmax(0,1fr);gap:24px;align-items:start}
+  .col-in{min-width:0;display:flex;flex-direction:column}
+  .col-in textarea{min-height:150px}
+  .col-in .drop{margin-top:10px}
+  /* one row, each button taking an equal share of the leftover width so the
+     group spans the column instead of trailing off mid-way */
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .btnrow .act{margin:0;padding:11px 14px;white-space:nowrap;flex:1 1 auto;text-align:center}
+  /* the paste box is the drop target now that the dashed zone is gone */
+  textarea.hot{outline:2px dashed var(--seen);outline-offset:-3px;background:#F4F7F8}
+  .col-out{min-width:0}
+  .col-out:empty{border:1px dashed var(--rule);border-radius:3px;min-height:230px;
+       display:flex;align-items:center;justify-content:center}
+  .col-out:empty::after{content:"nothing illuminated yet";font-family:var(--mono);font-size:11px;
+       letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer)}
+  @media(max-width:900px){ .reveal{grid-template-columns:1fr;gap:14px} .btnrow{max-width:460px} }
+
+  /* full-bleed reveal — sized to native, shrunk only if the viewport demands it */
+  .veil{position:fixed;inset:0;z-index:60;background:rgba(9,12,19,.96);display:none;
+        flex-direction:column;padding:14px 18px 16px;gap:10px}
+  .veil.on{display:flex}
+  .veil .vframe{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+  .veil .vframe img,.veil .vframe video{display:block;border-radius:3px;background:#000;
+        box-shadow:0 18px 60px rgba(0,0,0,.6)}
+  .veil .vbar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;flex:0 0 auto}
+  .veil .vbar .vmeta{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .veil .vbar .vmeta b{color:var(--paper);font-weight:400}
+  .veil .vbar .vscale{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer)}
+  .veil .vbar .gap{flex:1}
+  .veil .vclose{appearance:none;background:none;border:1px solid var(--rule);border-radius:3px;color:var(--dim);
+        font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:7px 14px;cursor:pointer}
+  .veil .vclose:hover{color:var(--paper);border-color:var(--dim)}
+  .veil .vclose:focus-visible{outline:2px solid var(--seen);outline-offset:2px}
+  .glyph.plain{font-family:var(--mono)}
+  .hint{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dimmer);margin-top:10px}
+
+  button.act{appearance:none;background:var(--paper);color:#12161E;border:0;border-radius:3px;padding:11px 22px;cursor:pointer;
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:14px 5px 0}
+  button.act:hover{background:var(--seen)}
+  button.act.ghost{background:none;color:var(--dim);box-shadow:inset 0 0 0 1px var(--rule)}
+  button.act.ghost:hover{color:var(--paper);box-shadow:inset 0 0 0 1px var(--dim)}
+  button.act:focus-visible{outline:2px solid var(--seen);outline-offset:2px}
+
+  table.spec{width:100%;border-collapse:collapse;margin-top:16px;font-family:var(--mono);font-size:12px}
+  table.spec td{padding:6px 0;border-bottom:1px solid var(--rule)}
+  table.spec td:first-child{color:var(--dim);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+  table.spec td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  table.spec td b{color:var(--seen)}
+
+  .note{font-family:var(--mono);font-size:11.5px;line-height:1.65;margin-top:14px;padding:10px 13px;
+        border-left:2px solid var(--seen);background:var(--ink-2);color:var(--dim);border-radius:0 3px 3px 0}
+  .note.warn{border-left-color:var(--unseen);color:var(--unseen)}
+
+  /* the signature: codepoint strip */
+  .strip{display:flex;flex-wrap:wrap;gap:4px;margin-top:12px;padding:14px;background:var(--ink-2);border:1px solid var(--rule);border-radius:3px;
+         max-height:340px;overflow:auto}
+  .cp{border-radius:3px;padding:5px 6px;text-align:center;min-width:52px;border:1px solid}
+  .cp.vis{border-color:rgba(91,209,196,.45);background:rgba(91,209,196,.09)}
+  .cp.hid{border-color:rgba(242,99,126,.32);background:rgba(242,99,126,.07)}
+  .cp .ch{font-family:var(--emoji);font-size:21px;line-height:1.25;color:var(--seen)}
+  .cp .ch.mono{font-family:var(--mono)}
+  .cp .byte{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1.35;color:var(--unseen)}
+  .cp .u{font-family:var(--mono);font-size:8.5px;letter-spacing:.03em;color:var(--dimmer);white-space:nowrap;margin-top:1px}
+
+  .legend{display:flex;gap:18px;margin-top:10px;font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dimmer)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:-1px;font-style:normal}
+
+  .stages{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px}
+  @media(max-width:900px){.stages{grid-template-columns:1fr}}
+  .stage{background:var(--ink-2);border:1px solid var(--rule);border-radius:3px;padding:16px;text-align:center}
+  .stage .n{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);margin-bottom:10px}
+  .stage .big{font-family:var(--emoji);font-size:52px;line-height:1.2;user-select:all;word-break:break-all;min-height:64px}
+  .stage .big.mono{font-family:var(--mono)}
+  .stage .m{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:8px;font-variant-numeric:tabular-nums}
+  .stage .m b{color:var(--seen)}
+  .pay{font-family:var(--mono);font-size:12px;background:var(--paper);color:#12161E;border-radius:3px;padding:13px 15px;margin-top:14px;
+       white-space:pre-wrap;word-break:break-word;line-height:1.55;max-height:70vh;overflow:auto}
+  .pay.full{max-height:none;overflow:visible}
+  /* media is not text — no scroll cage, no paper ground, no height cap */
+  .pay.media{max-height:none;overflow:visible;background:none;padding:0;margin-top:0;line-height:0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+
+  /* canary */
+  .seg{display:flex;border:1px solid var(--rule);border-radius:3px;width:fit-content;overflow:hidden;margin-bottom:10px}
+  .seg button{appearance:none;background:var(--ink-2);border:0;border-right:1px solid var(--rule);padding:8px 16px;cursor:pointer;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .seg button:last-child{border-right:0}
+  .seg button:hover{color:var(--paper)}
+  .seg button[aria-pressed="true"]{background:var(--paper);color:#12161E}
+  .seg button:focus-visible{outline:2px solid var(--seen);outline-offset:-3px}
+  .hexpeek{font-family:var(--mono);font-size:11.5px;line-height:1.75;background:var(--ink-2);border:1px solid var(--rule);
+    border-radius:3px;padding:12px;margin-top:10px;overflow-x:auto;white-space:pre;color:var(--dim)}
+  .hexpeek b{color:var(--unseen);font-weight:400}
+  .hexpeek u{color:var(--seen);text-decoration:none}
+  .grid256{display:grid;grid-template-columns:repeat(16,1fr);gap:3px;margin-top:12px;max-width:560px}
+  .cell{aspect-ratio:1;border-radius:2px;font-family:var(--mono);font-size:8px;display:flex;align-items:center;justify-content:center;
+        border:1px solid transparent;color:rgba(0,0,0,.55)}
+  .cell.live{background:var(--seen)}
+  .cell.dead{background:rgba(242,99,126,.16);border-color:rgba(242,99,126,.4);color:var(--unseen)}
+  .cell.cheap{box-shadow:inset 0 0 0 2px rgba(233,236,239,.55)}
+  .bars{margin-top:16px}
+  .bar{margin-bottom:12px}
+  .bar .cap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;
+            text-transform:uppercase;color:var(--dim);margin-bottom:5px}
+  .bar .cap b{color:var(--paper);font-variant-numeric:tabular-nums}
+  .bar .track{height:9px;background:var(--ink-3);border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+  .bar .fill{height:100%;background:var(--seen);width:0}
+  .verdict{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:.01em;margin:16px 0 2px;font-variant-numeric:tabular-nums}
+  .verdict.ok{color:var(--seen)} .verdict.bad{color:var(--unseen)} .verdict.part{color:#F0B44B}
+  .verdict-sub{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  table.log{width:100%;border-collapse:collapse;margin-top:14px;font-family:var(--mono);font-size:11.5px}
+  table.log th{text-align:left;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer);
+               padding:6px 8px 6px 0;border-bottom:1px solid var(--rule);font-weight:400}
+  table.log td{padding:7px 8px 7px 0;border-bottom:1px solid var(--rule);font-variant-numeric:tabular-nums}
+  table.log td.y{color:var(--seen)} table.log td.n{color:var(--unseen)}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="masthead">
+  <span class="wordmark">STG2</span>
+  <span class="tagline">variation selectors</span>
+  <span class="gap"></span>
+  <span class="stamp">offline · nothing leaves this machine</span>
+  <button class="stamp lab" id="btnLab" aria-pressed="false" title="show the field tools">field tools</button>
+</div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-p="hide">Occultation</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="reveal">Illumination</button>
+  <button class="tab" role="tab" aria-selected="false" data-p="canary" hidden>Canary</button>
+</div>
+
+<!-- ============ OCCULTATION ============ -->
+<section class="panel on" id="p-hide">
+  <h2 class="sec">the state of being hidden from view</h2>
+  <p class="lede">choose your emoji, add your text or payload, and copy away..</p>
+
+  <div class="compose">
+    <div class="col-pick">
+      <span class="lbl">base glyph</span>
+      <div class="picker"><div id="racks"></div></div>
+      <div class="subfield">
+        <div class="rname">Or type your own</div>
+        <input class="txt" id="custom" placeholder="…" maxlength="16">
+      </div>
+    </div>
+
+    <div class="col-msg">
+      <span class="lbl">Message</span>
+      <div class="seg" role="group" id="payMode">
+        <button data-m="text" aria-pressed="true">Type it</button>
+        <button data-m="file" aria-pressed="false">Load a file</button>
+      </div>
+      <textarea id="msg">If you can't spot the sucker in your first half hour at the table, then you are the sucker.</textarea>
+      <div id="wPayFile" hidden>
+        <div class="drop" id="pfDrop" tabindex="0" role="button"><p>Drop any file · or click</p></div>
+        <input type="file" id="pfFile" hidden>
+        <div class="seg" role="group" id="gzMode" style="margin-top:12px">
+          <button data-g="raw" aria-pressed="true">As-is</button>
+          <button data-g="gz" aria-pressed="false">Gzip it first</button>
+        </div>
+        <table class="spec" id="pfSpec" hidden>
+          <tr><td>File</td><td id="pf-n">—</td></tr>
+          <tr><td>Type</td><td id="pf-t">—</td></tr>
+          <tr><td>Size</td><td id="pf-s">—</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="baseNote"></div>
+
+  <div class="out">
+    <div class="glyph" id="outGlyph">—</div>
+    <div class="hint" id="outHint">select it, or hit copy</div>
+    <button class="act" id="btnCopy">Copy</button>
+    <button class="act ghost" id="btnDlTxt">Download as .txt</button>
+    <button class="act ghost" id="btnSend">see the witchcraft</button>
+  </div>
+  <div id="fitNote"></div>
+
+  <table class="spec">
+    <tr><td>Message</td><td id="s-msg">—</td></tr>
+    <tr><td>Result, on screen</td><td id="s-vis">—</td></tr>
+    <tr><td>Result, in codepoints</td><td id="s-cp">—</td></tr>
+    <tr><td>Result, in UTF-8 bytes</td><td id="s-utf">—</td></tr>
+    <tr><td>Expansion</td><td id="s-exp">—</td></tr>
+  </table>
+</section>
+
+<!-- ============ ILLUMINATION ============ -->
+<section class="panel" id="p-reveal">
+  <h2 class="sec">revealing that which was concealed</h2>
+  <p class="lede">Paste anything. Every codepoint gets a card — teal for the ones you can see, pink for the ones you can't.</p>
+
+  <div class="reveal">
+    <div class="col-in">
+      <textarea id="inStr" placeholder="Paste here… or drop a .txt file"></textarea>
+      <input type="file" id="rvFile" accept=".txt,text/plain" hidden>
+      <div class="btnrow">
+        <button class="act" id="btnRead">Light it up</button>
+        <button class="act ghost" id="btnClear">Clear</button>
+        <button class="act ghost" id="btnUpload">Upload .txt</button>
+      </div>
+    </div>
+    <div class="col-out" id="readOut"></div>
+  </div>
+
+  <div id="stripOut"></div>
+</section>
+
+<!-- ============ CANARY ============ -->
+<section class="panel" id="p-canary">
+  <h2 class="sec">Canary</h2>
+  <p class="lede">Send a probe carrying all 256 variation selectors down a channel and see which ones come back.
+    Whatever survives the round trip is what you can actually hide in.</p>
+
+  <span class="lbl">Step one · take the probe</span>
+  <div class="out" style="text-align:left;padding:16px">
+    <div class="glyph" id="probeGlyph" style="font-size:44px;text-align:center">—</div>
+    <div class="hint" style="text-align:center">one bird, 256 selectors, 8 other invisibles, one bird</div>
+    <div style="text-align:center"><button class="act" id="btnProbe">Copy the probe</button>
+      <button class="act ghost" id="btnClip">Test this device's clipboard</button></div>
+  </div>
+  <div id="clipOut"></div>
+
+  <span class="lbl">Step two · how did you get it back?</span>
+  <div class="seg" role="group" id="pathSeg">
+    <button data-path="clipboard" aria-pressed="true">Copied off screen</button>
+    <button data-path="source" aria-pressed="false">From raw source</button>
+    <button data-path="file" aria-pressed="false">From a file</button>
+  </div>
+  <div class="note" id="pathNote"></div>
+
+  <span class="lbl">Step three · paste what came back</span>
+  <div class="seg" role="group" id="modeSeg">
+    <button data-mode="text" aria-pressed="true">As text</button>
+    <button data-mode="b64" aria-pressed="false">As base64</button>
+  </div>
+  <textarea id="returned" placeholder="Paste the round-tripped probe here…"></textarea>
+  <div class="row" style="margin-top:10px">
+    <input class="txt" id="chan" style="font-family:var(--mono);font-size:13px;width:220px" placeholder="channel name">
+    <button class="act" id="btnTest" style="margin:0">Check the bird</button>
+  </div>
+
+  <div id="canaryOut"></div>
+  <div id="logOut"></div>
+
+  <span class="lbl">Inspecting a live page</span>
+  <p class="lede">A rendered <code>t</code> looks like a <code>t</code> whether it carries 0 hidden codepoints or 28.
+    Paste this into the browser console on any page. It reports the longest <em>run</em> of selectors on any single node —
+    an isolated one is just an emoji, a run of dozens is a payload.</p>
+  <div class="hexpeek" id="snippet" style="white-space:pre-wrap;color:var(--paper)"></div>
+  <button class="act" id="btnSnip">Copy the scanner</button>
+  <div class="note">Isolated selectors are almost always U+FE0F doing its ordinary job — forcing colour emoji presentation.
+    Any page with icons has dozens. What matters is the run length: a payload puts many selectors back to back on one node,
+    so a longest run of 1 means the renderer stripped yours.</div>
+</section>
+
+<!-- ============ FULL-BLEED REVEAL ============ -->
+<div class="veil" id="veil" role="dialog" aria-modal="true" aria-label="Recovered media">
+  <div class="vframe" id="vframe"></div>
+  <div class="vbar">
+    <span class="vmeta" id="vmeta">—</span>
+    <span class="vscale" id="vscale"></span>
+    <span class="gap"></span>
+    <button class="vclose" id="vclose">Close · esc</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const TE=new TextEncoder(), TD=new TextDecoder("utf-8",{fatal:false});
+const fmt=n=>n.toLocaleString("en-US");
+const kb=n=>n<1024?n+" B":n<1048576?(n/1024).toFixed(1)+" KB":(n/1048576).toFixed(2)+" MB";
+const cps=s=>[...s];
+
+/* ---- the codec ---- */
+const byteToVS = b => String.fromCodePoint(b < 16 ? 0xFE00 + b : 0xE0100 + b - 16);
+function vsToByte(ch){
+  const o = ch.codePointAt(0);
+  if (o >= 0xFE00 && o <= 0xFE0F) return o - 0xFE00;
+  if (o >= 0xE0100 && o <= 0xE01EF) return o - 0xE0100 + 16;
+  return null;
+}
+const encode = (base, bytes) => {
+  /* chunked so multi-megabyte payloads don't blow the argument limit */
+  const parts = [base];
+  const STEP = 32768;
+  for (let i = 0; i < bytes.length; i += STEP){
+    let s = "";
+    const end = Math.min(i + STEP, bytes.length);
+    for (let k = i; k < end; k++) s += byteToVS(bytes[k]);
+    parts.push(s);
+  }
+  return parts.join("");
+};
+const GLYPH_CAP = 4000;   /* past this we stop rendering the string and just describe it */
+
+/* magic-byte sniff — no header needed, so Butler's decoder still reads our output */
+function sniffType(b){
+  if (b.length < 4) return null;
+  if (b[0]===0x89 && b[1]===0x50) return ["image/png","png"];
+  if (b[0]===0xFF && b[1]===0xD8) return ["image/jpeg","jpg"];
+  if (b[0]===0x52 && b[1]===0x49 && b[8]===0x57 && b[9]===0x45) return ["image/webp","webp"];
+  if (b[0]===0x47 && b[1]===0x49 && b[2]===0x46) return ["image/gif","gif"];
+  if (b[4]===0x66 && b[5]===0x74 && b[6]===0x79 && b[7]===0x70) return ["video/mp4","mp4"];
+  if (b[0]===0x1A && b[1]===0x45 && b[2]===0xDF && b[3]===0xA3) return ["video/webm","webm"];
+  if (b[0]===0x50 && b[1]===0x4B) return ["application/zip","zip"];
+  if (b[0]===0x25 && b[1]===0x50) return ["application/pdf","pdf"];
+  if (b[0]===0x1F && b[1]===0x8B) return ["application/gzip","gz"];
+  if (b[0]===0x4F && b[1]===0x67 && b[2]===0x67) return ["audio/ogg","ogg"];
+  return null;
+}
+function decode(str){
+  const out = [];
+  for (const ch of str){
+    const b = vsToByte(ch);
+    if (b !== null) out.push(b);
+    else if (out.length) break;      // payload ended; stop at first ordinary char
+  }
+  return new Uint8Array(out);
+}
+const hasVS = s => cps(s).some(c => vsToByte(c) !== null);
+const hex = c => "U+" + c.codePointAt(0).toString(16).toUpperCase().padStart(4,"0");
+const isEmojiish = s => /\p{Extended_Pictographic}/u.test(s);
+
+/* ---- drop zone wiring ---- */
+function wire(zone, input, cb){
+  const open = () => input.click();
+  zone.onclick = open;
+  zone.onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); open(); } };
+  zone.ondragover = e => { e.preventDefault(); zone.classList.add("hot"); };
+  zone.ondragleave = () => zone.classList.remove("hot");
+  zone.ondrop = e => { e.preventDefault(); zone.classList.remove("hot"); if (e.dataTransfer.files[0]) cb(e.dataTransfer.files[0]); };
+  input.onchange = () => { if (input.files[0]) cb(input.files[0]); };
+}
+
+/* ---- full-bleed reveal ---- */
+/* Sizing rule: scale = min(1, availW/nativeW, availH/nativeH).
+   The 1 means we never upscale (no blur on a 320px payload); the other two mean
+   it always fits the viewport whole, so nothing is cropped and nothing scrolls. */
+let veilEl = null;
+function fitVeil(){
+  const f = $("#vframe");
+  if (!veilEl || !veilEl._nw) return;
+  const scale = Math.min(1, f.clientWidth / veilEl._nw, f.clientHeight / veilEl._nh);
+  veilEl.style.width  = Math.round(veilEl._nw * scale) + "px";
+  veilEl.style.height = Math.round(veilEl._nh * scale) + "px";
+  $("#vscale").textContent = scale >= 0.999
+    ? "shown 1:1"
+    : `fit to window · ${Math.round(scale * 100)}% of native`;
+}
+function noteNative(el, w, h){
+  if (!w || !h) return;
+  el._nw = w; el._nh = h;
+  $("#vmeta").innerHTML = `${$("#vmeta").dataset.mime} · <b>${w}×${h}</b>`;
+  fitVeil();
+}
+function openVeil(url, mime, sizeLabel){
+  const f = $("#vframe");
+  f.innerHTML = "";
+  $("#vmeta").dataset.mime = mime + " · " + sizeLabel;
+  $("#vmeta").textContent = mime + " · " + sizeLabel;
+  $("#vscale").textContent = "";
+  let el;
+  if (mime.startsWith("image/")){
+    el = document.createElement("img");
+    el.alt = "Recovered image";
+    el.onload = () => noteNative(el, el.naturalWidth, el.naturalHeight);
+  } else {
+    el = document.createElement("video");
+    el.controls = true; el.autoplay = true; el.loop = true;
+    el.muted = true; el.playsInline = true;
+    el.onloadedmetadata = () => noteNative(el, el.videoWidth, el.videoHeight);
+  }
+  el.src = url;
+  veilEl = el;
+  f.appendChild(el);
+  $("#veil").classList.add("on");
+  requestAnimationFrame(fitVeil);
+  $("#vclose").focus();
+}
+function closeVeil(){
+  const v = $("#veil");
+  if (!v.classList.contains("on")) return;
+  v.classList.remove("on");
+  if (veilEl && veilEl.tagName === "VIDEO") veilEl.pause();
+  $("#vframe").innerHTML = "";
+  veilEl = null;
+  const inline = document.querySelector("#readOut .shot");
+  if (inline) inline.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+$("#vclose").onclick = closeVeil;
+$("#veil").onclick = e => { if (e.target === $("#veil") || e.target === $("#vframe")) closeVeil(); };
+addEventListener("resize", fitVeil);
+const veilOpen = () => $("#veil").classList.contains("on");
+
+/* ---- tabs ---- */
+const showTab = t => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("on", p.id === "p-" + t.dataset.p));
+};
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => showTab(t));
+
+/* ---- field tools: gates the canary tab ---- */
+/* Off by default so the main two tabs read as the whole app. Opened by the
+   masthead toggle, by #canary in the URL, or by pressing "c" outside a field. */
+const canaryTab = document.querySelector('.tab[data-p="canary"]');
+let labOn = false;
+function setLab(on){
+  labOn = on;
+  canaryTab.hidden = !on;
+  $("#btnLab").setAttribute("aria-pressed", String(on));
+  $("#btnLab").title = on ? "hide the field tools" : "show the field tools";
+  if (!on && canaryTab.getAttribute("aria-selected") === "true"){
+    showTab(document.querySelector('.tab[data-p="hide"]'));
+  }
+  history.replaceState(null, "", on ? "#canary" : location.pathname + location.search);
+}
+$("#btnLab").onclick = () => setLab(!labOn);
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && veilOpen()){ closeVeil(); return; }
+  const t = e.target.tagName;
+  if (t === "INPUT" || t === "TEXTAREA" || e.metaKey || e.ctrlKey || e.altKey || veilOpen()) return;
+  if (e.key === "c" || e.key === "C") setLab(!labOn);
+});
+if (location.hash === "#canary") setLab(true);
+
+/* ---- base character picker ---- */
+/* Two pinned regulars, then a fresh draw of 33 from the pool on every load.
+   "Risky" is no longer a hand-labelled category — it's computed. Anything that
+   already carries a variation selector, or is a multi-codepoint ZWJ sequence,
+   gets flagged automatically by looksRisky(). Which means the traps live loose
+   in the draw instead of in a box marked TRAPS. */
+
+const PINNED = ["\u{1F9AB}", "\u{1F99E}"];          /* beaver, lobster */
+const DRAW_N = 32;                                   /* 8×4 — fills the cluster with no ragged last row */
+
+/* Clean single-codepoint pictographs — no VS16, no joiners. */
+const POOL_CLEAN = [
+  "\u{1F972}","\u{1F978}","\u{1F991}","\u{1F5FF}","\u{1F419}","\u{1F9CC}","\u{1FAA9}","\u{1F344}",
+  "\u{1F6F8}","\u{1FAB3}","\u{1FAE7}","\u{1F90C}","\u{1F9E6}","\u{1F9E0}","\u{1F9AD}","\u{1F9A6}",
+  "\u{1F9A5}","\u{1F994}","\u{1F9A8}","\u{1F9A9}","\u{1F9AC}","\u{1F9A7}","\u{1F995}","\u{1F996}",
+  "\u{1F9AE}","\u{1F43F}","\u{1F988}","\u{1F980}","\u{1F990}","\u{1F421}","\u{1F42C}","\u{1F433}",
+  "\u{1F9AA}","\u{1F423}","\u{1F986}","\u{1F9A2}","\u{1F989}","\u{1F99A}","\u{1F99C}","\u{1F32E}",
+  "\u{1F35C}","\u{1F363}","\u{1F368}","\u{1F36D}","\u{1F37F}","\u{1F95F}","\u{1F9C7}","\u{1F9C0}",
+  "\u{1F347}","\u{1F34D}","\u{1F951}","\u{1F336}","\u{1F955}","\u{1F9C4}","\u{1F680}","\u{1F6F0}",
+  "\u{1F30B}","\u{1F320}","\u{1F311}","\u{1FA90}","\u{1F52D}","\u{1F9ED}","\u{1F9F2}","\u{1F9EA}",
+  "\u{1F9EC}","\u{1F9EB}","\u{1F52C}","\u{1F5DD}","\u{1F4E1}","\u{1F9F7}","\u{1F0CF}","\u{1F004}",
+  "\u{1F3B2}","\u{1F3B0}","\u{1F4B0}","\u{1F9E9}","\u{1FA84}","\u{1FA9C}","\u{1F6FC}","\u{1F94F}",
+  "\u{1FA83}","\u{1F3AF}","\u{1F9F8}","\u{1FA86}","\u{1F9F6}","\u{1FAA1}","\u{1F9FF}","\u{1F97C}",
+  "\u{1F97D}","\u{1FA7C}","\u{1F9AF}","\u{1FA9E}","\u{1FAA0}"
+];
+
+/* These bite. Kept in the same draw on purpose — see seedRisky() below.
+   Group A already ends in U+FE0F, so a decoder eats it as payload byte 0x0F.
+   Group B is a ZWJ sequence: multi-codepoint, but joiners are not selectors,
+   so the payload stays clean. Two different lessons, one field. */
+const POOL_VS16 = ["\u2764\uFE0F","\u2660\uFE0F","\u2618\uFE0F","\u26F5\uFE0F","\u2708\uFE0F","\u2602\uFE0F","\u2744\uFE0F","\u26A1\uFE0F"];
+const POOL_ZWJ  = ["\u{1F43B}\u200D\u2744\uFE0F","\u{1F3F3}\uFE0F\u200D\u{1F308}","\u{1F9D1}\u200D\u{1F680}","\u{1F468}\u200D\u{1F469}\u200D\u{1F467}","\u{1F9D1}\u200D\u{1F373}","\u{1F415}\u200D\u{1F9BA}"];
+
+const POOL = [...new Set(POOL_CLEAN)];   /* cheap insurance against a dupe in the list above */
+const looksRisky = s => hasVS(s) || cps(s).length > 1;
+
+function shuffle(a){
+  const x = a.slice();
+  for (let i = x.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [x[i], x[j]] = [x[j], x[i]];
+  }
+  return x;
+}
+
+/* Guarantee the draw always contains at least two VS16 traps and one ZWJ
+   sequence, so the baseNote lesson is reachable on any load without being
+   signposted. Drop the two seed lines if you'd rather it be pure chance. */
+function drawField(){
+  const seeds = shuffle(POOL_VS16).slice(0,2).concat(shuffle(POOL_ZWJ).slice(0,1));
+  const rest  = shuffle(POOL.filter(c => !PINNED.includes(c))).slice(0, DRAW_N - seeds.length);
+  return shuffle(seeds.concat(rest));
+}
+
+let base = PINNED[0];
+const racks = $("#racks");
+
+function keyBtn(c, extra){
+  const b = document.createElement("button");
+  b.className = "key" + (looksRisky(c) ? " risky" : "") + (isEmojiish(c) ? "" : " plain") + (extra ? " " + extra : "");
+  b.textContent = c;
+  b.setAttribute("aria-pressed", c === base);
+  if (looksRisky(c)) b.title = "this one carries something already";
+  b.onclick = () => { base = c; $("#custom").value = ""; sync(); };
+  return b;
+}
+
+function renderRacks(){
+  racks.innerHTML = "";
+
+  const pin = document.createElement("div"); pin.className = "rack";
+  pin.innerHTML = `<div class="rname">Regulars</div>`;
+  const pk = document.createElement("div"); pk.className = "keys pinned";
+  PINNED.forEach(c => pk.appendChild(keyBtn(c, "pin")));
+  pin.appendChild(pk); racks.appendChild(pin);
+
+  const fld = document.createElement("div"); fld.className = "rack";
+  fld.innerHTML = `<div class="rname">your draw: <button class="reroll" id="btnReroll" type="button">reroll</button></div>`;
+  const fk = document.createElement("div"); fk.className = "keys";
+  drawField().forEach(c => fk.appendChild(keyBtn(c)));
+  fld.appendChild(fk); racks.appendChild(fld);
+
+  $("#btnReroll").onclick = () => { renderRacks(); sync(); };
+}
+renderRacks();
+
+let payMode = "text", payFile = null, gzMode = "raw", lastResult = "";
+document.querySelectorAll("#payMode button").forEach(b => b.onclick = () => {
+  payMode = b.dataset.m;
+  document.querySelectorAll("#payMode button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("#msg").hidden = payMode !== "text";
+  $("#wPayFile").hidden = payMode !== "file";
+  sync();
+});
+document.querySelectorAll("#gzMode button").forEach(b => b.onclick = () => {
+  gzMode = b.dataset.g;
+  document.querySelectorAll("#gzMode button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  sync();
+});
+wire($("#pfDrop"), $("#pfFile"), async f => {
+  const raw = new Uint8Array(await f.arrayBuffer());
+  payFile = { raw, name: f.name };
+  const t = sniffType(raw);
+  $("#pfSpec").hidden = false;
+  $("#pf-n").textContent = f.name;
+  $("#pf-t").textContent = t ? t[0] : (f.type || "unrecognised");
+  $("#pf-s").textContent = kb(raw.length);
+  sync();
+});
+async function gzip(bytes){
+  const s = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(s).arrayBuffer());
+}
+
+function currentBytes(){
+  if (payMode === "text") return TE.encode($("#msg").value);
+  return payFile ? payFile.cooked || payFile.raw : null;
+}
+
+$("#custom").oninput = e => { if (e.target.value) base = e.target.value; sync(); };
+$("#msg").oninput = sync;
+
+async function sync(){
+  document.querySelectorAll(".key").forEach(k => k.setAttribute("aria-pressed", k.textContent === base && !$("#custom").value));
+
+  if (payMode === "file" && payFile){
+    payFile.cooked = gzMode === "gz" ? await gzip(payFile.raw) : null;
+  }
+  const bytes = currentBytes();
+  const g = $("#outGlyph");
+
+  if (!bytes || !bytes.length){
+    g.textContent = "—"; lastResult = "";
+    ["s-msg","s-vis","s-cp","s-utf","s-exp"].forEach(id => $("#"+id).textContent = "—");
+    $("#outHint").textContent = payMode === "file" ? "load a file" : "type something";
+    return;
+  }
+
+  const res = encode(base, bytes);
+  lastResult = res;
+  const nCp = cps(res).length, nUtf = TE.encode(res).length;
+
+  g.classList.toggle("plain", !isEmojiish(base));
+  if (nCp > GLYPH_CAP){
+    g.textContent = cps(base)[0];
+    $("#outHint").innerHTML = `too big to put on screen — ${fmt(nCp)} codepoints. use copy or download.`;
+  } else {
+    g.textContent = res;
+    $("#outHint").textContent = "select it, or hit copy";
+  }
+
+  const label = payMode === "file" && payFile
+    ? `${esc(payFile.name)}${gzMode === "gz" ? " (gzipped)" : ""} · <b>${fmt(bytes.length)} bytes</b>`
+    : `${fmt($("#msg").value.length)} chars · <b>${fmt(bytes.length)} bytes</b>`;
+  $("#s-msg").innerHTML = label;
+  $("#s-vis").textContent = cps(base).length === 1 ? "1 character" : `1 character (${cps(base).length} codepoints)`;
+  $("#s-cp").textContent = fmt(nCp);
+  $("#s-utf").textContent = fmt(nUtf) + " (" + kb(nUtf) + ")";
+  $("#s-exp").textContent = (nUtf / bytes.length).toFixed(2) + "×";
+
+  const WA = 65536, u16 = res.length;
+  $("#fitNote").innerHTML = u16 <= WA
+    ? `<div class="note good">${fmt(u16)} UTF-16 units — comfortably inside a single WhatsApp message.</div>`
+    : nCp <= WA
+      ? `<div class="note">${fmt(nCp)} codepoints but ${fmt(u16)} UTF-16 units. Right on the line — depends whether the
+         platform counts codepoints or code units. Test it before you rely on it.</div>`
+      : `<div class="note warn">${fmt(nCp)} codepoints. Far past what any messaging platform will carry in one message —
+         this one travels as a file.</div>`;
+
+  const n = $("#baseNote");
+  if (hasVS(base)){
+    const stray = cps(base).filter(c => vsToByte(c) !== null).map(c => `${hex(c)} → byte 0x${vsToByte(c).toString(16).padStart(2,"0")}`);
+    n.innerHTML = `<div class="note warn">This base already ends in a variation selector (${stray.join(", ")}), so a decoder
+      reads it as part of the payload and your message comes back with junk on the front. Emoji that need U+FE0F to render in
+      colour all do this. Butler's decoder has the same behaviour — worth showing on purpose.</div>`;
+  } else if (cps(base).length > 1){
+    n.innerHTML = `<div class="note">This base is ${cps(base).length} codepoints joined with U+200D — Unicode's own version of an
+      emoji mashup. Zero-width joiner isn't a variation selector, so the payload stays clean.</div>`;
+  } else n.innerHTML = "";
+}
+
+$("#btnCopy").onclick = async () => {
+  const txt = lastResult, b = $("#btnCopy");
+  try { await navigator.clipboard.writeText(txt); }
+  catch {
+    const ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch(e){}
+    ta.remove();
+  }
+  b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy", 1400);
+};
+$("#btnDlTxt").onclick = () => {
+  if (!lastResult) return;
+  const url = URL.createObjectURL(new Blob([lastResult], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "packed.txt"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+};
+$("#btnSend").onclick = () => {
+  $("#inStr").value = lastResult;
+  document.querySelector('.tab[data-p="reveal"]').click();
+  readIt();
+};
+
+/* ---- codepoint strip ---- */
+let stripCap = 600;
+const STRIP_SLOW = 8000;   /* past this, rendering every chip takes a noticeable beat */
+function strip(str){
+  const list = cps(str);
+  const shown = list.slice(0, stripCap);
+  const cards = shown.map(c => {
+    const b = vsToByte(c);
+    if (b === null){
+      const mono = !isEmojiish(c);
+      const disp = c === " " ? "␣" : c === "\n" ? "⏎" : c;
+      return `<div class="cp vis"><div class="ch${mono?" mono":""}">${esc(disp)}</div><div class="u">${hex(c)}</div></div>`;
+    }
+    const printable = b >= 32 && b < 127;
+    return `<div class="cp hid"><div class="byte">${printable ? esc(String.fromCharCode(b)) : "·"}</div>
+            <div class="u">${hex(c)}</div><div class="u">0x${b.toString(16).padStart(2,"0")}</div></div>`;
+  }).join("");
+  let more = "";
+  if (list.length > stripCap){
+    const slow = list.length > STRIP_SLOW;
+    more = `<div class="note">Showing the first ${fmt(stripCap)} of ${fmt(list.length)} codepoints.
+      <button class="act" id="btnAllCp" style="margin:8px 0 0">Show all ${fmt(list.length)}${slow ? " — slow" : ""}</button></div>`;
+  } else if (stripCap > 600 && list.length > 600){
+    more = `<div class="note">Showing all ${fmt(list.length)}.
+      <button class="act ghost" id="btnFewCp" style="margin:8px 0 0">Back to the first 600</button></div>`;
+  }
+  return `<div class="strip">${cards}</div>
+    <div class="legend"><span><i style="background:var(--seen)"></i>visible</span>
+    <span><i style="background:var(--unseen)"></i>hidden — one byte each</span></div>${more}`;
+}
+/* the show-all buttons live inside markup that gets replaced wholesale, so rewire after each render */
+function wireStripButtons(){
+  const all = $("#btnAllCp"), few = $("#btnFewCp");
+  if (all) all.onclick = () => { stripCap = Infinity; all.textContent = "Rendering…"; setTimeout(readIt, 20); };
+  if (few) few.onclick = () => { stripCap = 600; readIt(); };
+}
+const esc = s => s.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+/* ---- reveal ---- */
+$("#btnRead").onclick = readIt;
+$("#btnClear").onclick = () => { closeVeil(); $("#inStr").value = ""; $("#readOut").innerHTML = ""; $("#stripOut").innerHTML = ""; };
+
+/* the dashed zone is gone, so the paste box does double duty: click Upload for
+   the picker, or drop a .txt straight onto the textarea. */
+async function loadTxt(f){
+  $("#readOut").innerHTML = `<div class="note"><span style="color:var(--seen)">Reading ${esc(f.name)}…</span></div>`;
+  $("#inStr").value = await f.text();
+  readIt();
+}
+$("#btnUpload").onclick = () => $("#rvFile").click();
+$("#rvFile").onchange = () => { if ($("#rvFile").files[0]) loadTxt($("#rvFile").files[0]); };
+const inBox = $("#inStr");
+inBox.addEventListener("dragover", e => { e.preventDefault(); inBox.classList.add("hot"); });
+inBox.addEventListener("dragleave", () => inBox.classList.remove("hot"));
+inBox.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0];
+  inBox.classList.remove("hot");
+  if (f){ e.preventDefault(); loadTxt(f); }   /* no file? let the browser paste the dragged text */
+});
+
+
+/* If the pasted text has no selectors, it may be a raw message source.
+   Pull out every base64-looking run, decode each, keep whichever yields the most selectors. */
+function tryBase64(txt){
+  const runs = txt.match(/(?:[A-Za-z0-9+/=]{40,}\s*){1,}/g) || [];
+  let best = null, bestN = 0;
+  for (const run of runs){
+    const clean = run.replace(/[^A-Za-z0-9+/]/g, "");
+    if (clean.length < 40) continue;
+    try {
+      const bin = atob(clean + "=".repeat((4 - clean.length % 4) % 4));
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      const dec = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      let n = 0;
+      for (const ch of dec) if (vsToByte(ch) !== null) n++;
+      if (n > bestN){ bestN = n; best = dec; }
+    } catch(e){}
+  }
+  return bestN ? best : null;
+}
+
+async function readIt(){
+  const raw = $("#inStr").value, o = $("#readOut");
+  const strp = $("#stripOut");
+  if (!raw){ o.innerHTML = `<div class="note">Nothing pasted yet.</div>`; strp.innerHTML = ""; return; }
+  let s = raw, viaB64 = false;
+  if (!hasVS(s)){
+    const alt = tryBase64(s);
+    if (alt){ s = alt; viaB64 = true; }
+  }
+  const bytes = decode(s);
+  const visible = cps(s).filter(c => vsToByte(c) === null).length;
+  let html = (viaB64 ? `<div class="note good">No selectors in what you pasted, but a base64 block in it decoded to some.
+      Read straight out of a raw message source.</div>` : "") + `<table class="spec">
+      <tr><td>On screen</td><td>${fmt(visible)} character${visible===1?"":"s"}</td></tr>
+      <tr><td>Actually</td><td>${fmt(cps(s).length)} codepoints · ${fmt(TE.encode(s).length)} UTF-8 bytes</td></tr>
+      <tr><td>Hidden payload</td><td><b>${fmt(bytes.length)} bytes</b></td></tr>
+    </table>`;
+
+  if (!bytes.length){
+    html += `<div class="note">No variation selectors here — this is exactly the text it appears to be.</div>`;
+    o.innerHTML = html;
+    strp.innerHTML = `<span class="lbl">Every codepoint</span>` + strip(s);
+    wireStripButtons(); return;
+  }
+  let body = bytes, note = "";
+  let kind = sniffType(body);
+  if (kind && kind[0] === "application/gzip" && "DecompressionStream" in window){
+    try {
+      const st = new Blob([body]).stream().pipeThrough(new DecompressionStream("gzip"));
+      body = new Uint8Array(await new Response(st).arrayBuffer());
+      kind = sniffType(body);
+      note = `<div class="note good">Payload was gzipped — inflated ${fmt(bytes.length)} B back to ${fmt(body.length)} B on the way out.</div>`;
+    } catch(e){}
+  }
+  html += note;
+
+  if (kind){
+    const [mime, ext] = kind;
+    const url = URL.createObjectURL(new Blob([body], { type: mime }));
+    const isVis = mime.startsWith("image/") || mime.startsWith("video/");
+    const tag = mime.startsWith("image/") ? `<img class="shot" src="${url}" alt="Recovered image">`
+      : mime.startsWith("video/") ? `<video class="shot" src="${url}" controls loop muted playsinline></video>`
+      : mime.startsWith("audio/") ? `<audio src="${url}" controls></audio>`
+      : `<span>${esc(mime)} — ${fmt(body.length)} bytes. No inline preview for this type.</span>`;
+
+    /* media leads — the stats are the footnote, not the headline */
+    o.innerHTML = `<div class="pay media" style="text-align:center">${tag}</div>
+      <div>${isVis ? `<button class="act" id="btnBig">See it full size</button>` : ""}
+      <a class="dl" href="${url}" download="recovered.${ext}">Save recovered.${ext}</a></div>
+      <table class="spec"><tr><td>Payload is</td><td><b>${esc(mime)}</b> · ${kb(body.length)}</td></tr></table>
+      ${html}`;
+    strp.innerHTML = `<span class="lbl">Every codepoint</span>` + strip(s);
+    wireStripButtons();
+
+    if (isVis){
+      const big = () => openVeil(url, mime, kb(body.length));
+      $("#btnBig").onclick = big;
+      const inline = o.querySelector(".shot");
+      if (inline) inline.style.cursor = "zoom-in", inline.onclick = e => { e.preventDefault(); big(); };
+      big();   /* the reveal is the point — open it big straight away */
+    }
+    return;
+  }
+
+  const text = TD.decode(body);
+  const clean = !/\uFFFD/.test(text);
+  html += `<div class="pay">${clean ? esc(text) : "Not text, and not a file type I recognise. First bytes: " + [...body].slice(0,64).map(b=>b.toString(16).padStart(2,"0")).join(" ")}</div>`;
+  if (clean && hasVS(text)){
+    html += `<div class="note">What came out has variation selectors of its own — there's another layer under this one.</div>
+             <button class="act" id="btnPeel">Peel the next layer</button>`;
+  }
+  o.innerHTML = html;
+  strp.innerHTML = `<span class="lbl">Every codepoint</span>` + strip(s);
+  wireStripButtons();
+
+  /* 70vh holds a poem whole; a novel still has to scroll, so offer the uncap */
+  const payEl = o.querySelector(".pay:not(.media)");
+  if (payEl && payEl.scrollHeight > payEl.clientHeight + 4){
+    const lines = (payEl.textContent.match(/\n/g) || []).length + 1;
+    const b = document.createElement("button");
+    b.className = "act ghost";
+    b.textContent = `Let it run — all ${fmt(lines)} lines`;
+    b.onclick = () => { payEl.classList.add("full"); b.remove(); };
+    payEl.insertAdjacentElement("afterend", b);
+  }
+
+  const peel = $("#btnPeel");
+  if (peel) peel.onclick = () => { $("#inStr").value = text; readIt(); };
+}
+
+/* ---- canary ---- */
+const CONTROLS = [
+  [0x200B,"zero width space"],       [0x200C,"zero width non-joiner"],
+  [0x200D,"zero width joiner"],      [0x2060,"word joiner"],
+  [0x00AD,"soft hyphen"],            [0xFEFF,"zero width no-break space"],
+  [0x034F,"combining grapheme joiner"],[0xE0041,"tag latin capital A"],
+];
+const VS_ALL = Array.from({length:256}, (_,b) => byteToVS(b)).join("");
+const PROBE = "🐦" + VS_ALL + "|" + CONTROLS.map(([cp]) => "·" + String.fromCodePoint(cp)).join("") + "|🐦";
+$("#probeGlyph").textContent = PROBE;
+
+$("#btnProbe").onclick = async () => {
+  const b = $("#btnProbe");
+  try { await navigator.clipboard.writeText(PROBE); }
+  catch {
+    const ta = document.createElement("textarea");
+    ta.value = PROBE; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch(e){}
+    ta.remove();
+  }
+  b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy the probe", 1400);
+};
+
+/* ---- device clipboard self-test ---- */
+$("#btnClip").onclick = async () => {
+  const o = $("#clipOut");
+  o.innerHTML = `<div class="note">Writing the probe, then reading it straight back…</div>`;
+  let back;
+  try {
+    await navigator.clipboard.writeText(PROBE);
+    back = await navigator.clipboard.readText();
+  } catch (e) {
+    o.innerHTML = `<div class="note warn">This browser wouldn't let the page read the clipboard
+      (${esc(String(e.name || e))}). Chrome will prompt for permission; Safari mostly refuses. Fall back to copying the probe
+      and pasting it into the box below by hand — that tests the same path, just with you in the middle.</div>`;
+    return;
+  }
+  const inN = cps(PROBE).length, outN = cps(back).length;
+  const seen = new Set([...back].map(c => c.codePointAt(0)));
+  let low = 0, high = 0;
+  for (let b = 0; b < 256; b++){
+    const cp = b < 16 ? 0xFE00 + b : 0xE0100 + b - 16;
+    if (seen.has(cp)) (b < 16 ? low++ : high++);
+  }
+  const exact = back === PROBE;
+  o.innerHTML = `<div class="verdict ${exact ? "ok" : low + high ? "part" : "bad"}">${low + high} / 256</div>
+    <div class="verdict-sub">${exact ? "this device's clipboard is lossless" : "this device's clipboard drops codepoints"}
+      · ${fmt(inN)} in, ${fmt(outN)} out</div>
+    <div class="note">Nothing left the machine — the probe went to the clipboard and came straight back.
+      This isolates the clipboard from any messaging app.</div>`;
+};
+
+/* ---- page scanner snippet ---- */
+const SNIPPET =
+`(()=>{const isVS=o=>(o>=0xFE00&&o<=0xFE0F)||(o>=0xE0100&&o<=0xE01EF);
+let hits=[],tally={},w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);
+while(w.nextNode()){const cs=[...w.currentNode.nodeValue];let run=0,best=0,n=0;
+for(const c of cs){const o=c.codePointAt(0);
+if(isVS(o)){n++;run++;best=Math.max(best,run);tally['U+'+o.toString(16).toUpperCase()]=(tally['U+'+o.toString(16).toUpperCase()]||0)+1}
+else run=0}
+if(n)hits.push({el:w.currentNode.parentElement,count:n,longestRun:best,
+text:w.currentNode.nodeValue.replace(/[\\uFE00-\\uFE0F]|[\\u{E0100}-\\u{E01EF}]/gu,'').slice(0,30)})}
+const maxRun=hits.reduce((m,h)=>Math.max(m,h.longestRun),0);
+hits.filter(h=>h.longestRun>2).forEach(h=>h.el.style.outline='3px solid #F2637E');
+console.log('%c'+(maxRun>2?'PAYLOAD LIKELY — longest run of '+maxRun+' selectors on one node'
+:maxRun?'Nothing hidden here. '+hits.length+' node(s) with isolated selectors — ordinary emoji.'
+:'No variation selectors at all.'),'font:600 13px monospace');
+console.table(hits.map(h=>({text:h.text,selectors:h.count,longestRun:h.longestRun})));
+console.log('by codepoint:',tally);return{maxRun,nodes:hits.length,tally}})()`;
+$("#snippet").textContent = SNIPPET;
+$("#btnSnip").onclick = async () => {
+  const b = $("#btnSnip");
+  try { await navigator.clipboard.writeText(SNIPPET); }
+  catch {
+    const ta = document.createElement("textarea");
+    ta.value = SNIPPET; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch(e){}
+    ta.remove();
+  }
+  b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy the scanner", 1400);
+};
+
+let retPath = "clipboard", inMode = "text";
+const PATH_NOTE = {
+  clipboard: `Copying off a rendered page or a terminal is the lossiest route. Browsers and terminal emulators
+    both normalise on the way out, so a failure here says nothing about whether the channel itself carried the bytes.`,
+  source: `The honest test. View the raw message source — Gmail's "Show original", a mail client's view-source, an export.
+    If the selectors are here, the channel is open no matter what the renderer showed you.`,
+  file: `A file on disk that you never selected with a mouse. Closest thing to ground truth short of a hex dump.`,
+};
+function setPath(p){
+  retPath = p;
+  document.querySelectorAll("#pathSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.path === p));
+  $("#pathNote").innerHTML = PATH_NOTE[p];
+}
+document.querySelectorAll("#pathSeg button").forEach(b => b.onclick = () => setPath(b.dataset.path));
+setPath("clipboard");
+
+function setMode(m){
+  inMode = m;
+  document.querySelectorAll("#modeSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m));
+  $("#returned").placeholder = m === "b64"
+    ? "Paste the base64 body straight out of the message source — line breaks are fine…"
+    : "Paste the round-tripped probe here…";
+}
+document.querySelectorAll("#modeSeg button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+function b64ToText(s){
+  const clean = s.replace(/[^A-Za-z0-9+/]/g, "");
+  const bin = atob(clean + "=".repeat((4 - clean.length % 4) % 4));
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+/* first bytes as hex, with variation-selector sequences called out */
+function hexPeek(str, limit=16){
+  const bytes = TE.encode(str);
+  let out = "", i = 0, shown = 0;
+  while (i < bytes.length && shown < limit){
+    const lead = bytes[i];
+    const n = lead < 0x80 ? 1 : lead < 0xE0 ? 2 : lead < 0xF0 ? 3 : 4;
+    const seq = [...bytes.slice(i, i + n)].map(b => b.toString(16).toUpperCase().padStart(2,"0")).join(" ");
+    let cp = 0;
+    try { cp = [...TD.decode(bytes.slice(i, i + n))][0].codePointAt(0); } catch(e){}
+    const isVS = (cp >= 0xFE00 && cp <= 0xFE0F) || (cp >= 0xE0100 && cp <= 0xE01EF);
+    out += isVS ? `<b>${seq}</b>  ` : `<u>${seq}</u>  `;
+    i += n; shown++;
+  }
+  return `<div class="hexpeek">${out}${i < bytes.length ? "…" : ""}</div>
+    <div class="legend"><span><i style="background:var(--seen)"></i>ordinary characters</span>
+    <span><i style="background:var(--unseen)"></i>variation selectors</span></div>`;
+}
+
+const LOG = [];
+$("#btnTest").onclick = () => {
+  const rawIn = $("#returned").value;
+  const o = $("#canaryOut");
+  if (!rawIn.trim()){ o.innerHTML = `<div class="note warn">Nothing pasted back yet.</div>`; return; }
+  let back;
+  if (inMode === "b64"){
+    try { back = b64ToText(rawIn); }
+    catch(e){ o.innerHTML = `<div class="note warn">That isn't valid base64. Copy the block from the message source,
+      including any line breaks — those get stripped automatically.</div>`; return; }
+    if (!back){ o.innerHTML = `<div class="note warn">Base64 decoded to nothing.</div>`; return; }
+  } else back = rawIn;
+
+  const seen = new Set([...back].map(c => c.codePointAt(0)));
+  const live = [];
+  for (let b = 0; b < 256; b++) live.push(seen.has(b < 16 ? 0xFE00 + b : 0xE0100 + b - 16));
+  const lowLive = live.slice(0,16).filter(Boolean).length;
+  const highLive = live.slice(16).filter(Boolean).length;
+  const total = lowLive + highLive;
+  const birds = [...back].filter(c => c.codePointAt(0) === 0x1F426).length;
+
+  const cells = live.map((ok,b) =>
+    `<div class="cell ${ok?"live":"dead"}${b<16?" cheap":""}" title="byte 0x${b.toString(16).padStart(2,"0")}">${b}</div>`).join("");
+
+  const bar = (name, n, of) => `<div class="bar"><div class="cap"><span>${name}</span>
+      <span><b>${n}</b> / ${of}</span></div>
+      <div class="track"><div class="fill" style="width:${of?n/of*100:0}%"></div></div></div>`;
+
+  const ctl = CONTROLS.map(([cp,name]) => {
+    const ok = seen.has(cp);
+    return `<tr><td>U+${cp.toString(16).toUpperCase().padStart(4,"0")}</td><td>${name}</td>
+            <td class="${ok?"y":"n"}" style="text-align:right">${ok?"survived":"stripped"}</td></tr>`;
+  }).join("");
+
+  const cls = total === 256 ? "ok" : total === 0 ? "bad" : "part";
+  const verdict = total === 256 ? "Channel is wide open"
+    : total === 0 ? "Channel strips everything"
+    : "Channel is leaky";
+
+  const PATH_LABEL = { clipboard:"copied off screen", source:"from raw source", file:"from a file" };
+  o.innerHTML = `
+    <div class="verdict ${cls}">${total} / 256</div>
+    <div class="verdict-sub">${verdict} · ${PATH_LABEL[retPath]} · ${birds} of 2 sentinels came back</div>
+    ${retPath === "clipboard" && total < 256 ? `<div class="note warn">You read this off a rendered surface, so this is a
+      result about the <em>clipboard</em>, not the channel. Before writing the channel off, check the raw message source.</div>` : ""}
+    <span class="lbl">First bytes, as they actually are</span>
+    ${hexPeek(back)}
+    <div class="bars">
+      ${bar("U+FE00–FE0F · basic plane, 3 bytes each", lowLive, 16)}
+      ${bar("U+E0100–E01EF · plane 14, 4 bytes each", highLive, 240)}
+    </div>
+    <span class="lbl">Which bytes you could still carry</span>
+    <div class="grid256">${cells}</div>
+    <div class="legend"><span><i style="background:var(--seen)"></i>survived</span>
+      <span><i style="background:rgba(242,99,126,.4)"></i>stripped</span>
+      <span><i style="background:none;box-shadow:inset 0 0 0 2px rgba(233,236,239,.55)"></i>the cheap 16</span></div>
+    <span class="lbl">Other invisible characters</span>
+    <table class="log"><tr><th>codepoint</th><th>name</th><th style="text-align:right">result</th></tr>${ctl}</table>
+    ${total > 0 && total < 256 ? `<div class="note">Partial survival means a payload is still possible, just on a
+      smaller alphabet — ${total} usable symbols is ${(Math.log2(total)).toFixed(2)} bits per selector instead of 8.</div>` : ""}
+    ${birds < 2 ? `<div class="note warn">A sentinel bird went missing, so the string may have been truncated rather than
+      sanitised. Check you copied the whole thing.</div>` : ""}`;
+
+  LOG.push({ chan: $("#chan").value || "unnamed", path: PATH_LABEL[retPath], total, lowLive, highLive });
+  $("#logOut").innerHTML = `<span class="lbl">Results so far</span>
+    <table class="log">
+      <tr><th>channel</th><th>read back</th><th style="text-align:right">FE00–FE0F</th><th style="text-align:right">E0100–E01EF</th>
+          <th style="text-align:right">total</th><th style="text-align:right">verdict</th></tr>
+      ${LOG.map(r => `<tr><td>${esc(r.chan)}</td><td>${r.path}</td><td style="text-align:right">${r.lowLive}/16</td>
+        <td style="text-align:right">${r.highLive}/240</td><td style="text-align:right">${r.total}/256</td>
+        <td class="${r.total===256?"y":r.total===0?"n":""}" style="text-align:right">${r.total===256?"open":r.total===0?"closed":"leaky"}</td></tr>`).join("")}
+    </table>
+    <div class="note">A channel is only closed if it fails <em>from raw source</em>. Failing off the clipboard just means
+      the renderer ate it.</div>`;
+};
+
+sync();
+</script>
